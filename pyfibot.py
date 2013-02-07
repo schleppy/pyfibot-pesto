@@ -276,9 +276,7 @@ class PyFiBotFactory(ThrottledClientFactory):
             cmdchar = '.'
         else:
             cmdchar = self.config['cmdchar']
-        password = self.config.get('networks', {}).get('crowdstrike', {}).get('password', '')
         p = self.protocol(n, cmdchar)
-        p.password = password
         self.allBots[n.alias] = p
         p.factory = self
         return p

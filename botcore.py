@@ -267,6 +267,7 @@ class PyFiBot(irc.IRCClient, CoreCommands):
         
         self.network = network
         self.nickname = self.network.nickname
+        self.password = self.network.password
 
         self.timer_counter = 0
         reactor.callLater(1, self.timerEvent, 1)
