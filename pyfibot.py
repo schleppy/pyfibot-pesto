@@ -36,6 +36,7 @@ except ImportError:
 from util import *
 from util.BeautifulSoup import BeautifulSoup
 from util.BeautifulSoup import UnicodeDammit
+from txzmq import ZmqFactory, ZmqEndpoint, ZmqPubConnection, ZmqSubConnection
 
 # default timeout for socket connections
 import socket
@@ -44,6 +45,23 @@ socket.setdefaulttimeout(20)
 import botcore
 
 log = logging.getLogger('core')
+
+class BotZMQConnection(ZmqSubConnection):
+    
+    def messageReceived(self, message):
+        self.gotMessage(*message)
+
+class ZMQInterface(object):
+
+    def __init__(self, bots):
+        self.bots = bots
+        self.service = BotZMQConnection(zmq_factory, zmq_endpoints[0])
+        self.service.subscribe("")
+        self.service.gotMessage = self.sayInChannel
+
+    def sayInChannel(self, *args):
+        for k, v in self.bots.items():
+            v.say("#ops", "%s" % (" ".join(args[:2])))
 
 
 class URLCacheItem(object):
@@ -464,6 +482,12 @@ if __name__ == '__main__':
             print 'No config file found, there is an example config (bot.config.example) for you. Please edit it and rename to bot.config or delete it to generate a new example config.'
         sys.exit(1)
 
+    print config
+    if config.get('zmq', False):
+        zmq_factory = ZmqFactory()
+        endpoints = config.get('zmq', {}).get('endpoints', [])
+        zmq_endpoints = [ZmqEndpoint("connect", ep) for ep in endpoints]
+
     factory = PyFiBotFactory(config)
     for network, settings in config['networks'].items():
         # use network specific nick if one has been configured
@@ -485,6 +509,7 @@ if __name__ == '__main__':
         factory.createNetwork((settings['server'], port), network, nick, chanlist, linerate, password, is_ssl)
         if is_ssl:
             log.info("connection via SSL to %s:%d" % (server_name, port))
+            c = ZMQInterface(factory.allBots)
             reactor.connectSSL(server_name, port, factory, ssl.ClientContextFactory())
         else:
             reactor.connectTCP(settings['server'], port, factory)
