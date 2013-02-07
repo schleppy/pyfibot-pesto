@@ -27,7 +27,7 @@ except ImportError:
 # twisted imports
 try:
     from twisted.words.protocols import irc
-    from twisted.internet import reactor, protocol, threads, defer
+    from twisted.internet import reactor, protocol, threads, defer, ssl
     from twisted.python import rebuild
 except ImportError:
     print "Twisted library not found, please install Twisted from http://twistedmatrix.com/products/download"
@@ -162,11 +162,14 @@ class BotURLOpener(urllib.FancyURLopener):
         return ('', '')
 
 class Network:
-    def __init__(self, root, alias, address, nickname, channels = None):
+    def __init__(self, root, alias, address, nickname, channels = None, linerate=None, password=None, is_ssl=False):
         self.alias = alias                         # network name
         self.address = address                     # server address
         self.nickname = nickname                   # nick to use
         self.channels = channels or {}             # channels to join
+        self.linerate = linerate
+        self.password = password
+        self.is_ssl = is_ssl
 
         # create network specific save directory
         p = os.path.join(root, alias)
@@ -261,6 +264,7 @@ class PyFiBotFactory(ThrottledClientFactory):
 
         # do we know how to connect to the given address?
         for n in self.data['networks'].values():
+            print n.address, address
             if n.address == address:
                 break
         else:
@@ -272,14 +276,15 @@ class PyFiBotFactory(ThrottledClientFactory):
             cmdchar = '.'
         else:
             cmdchar = self.config['cmdchar']
-
+        password = self.config.get('networks', {}).get('crowdstrike', {}).get('password', '')
         p = self.protocol(n, cmdchar)
+        p.password = password
         self.allBots[n.alias] = p
         p.factory = self
         return p
 
-    def createNetwork(self, address, alias, nickname, channels = None):
-        self.setNetwork(Network("data", alias, address, nickname, channels))
+    def createNetwork(self, address, alias, nickname, channels = None, linerate=None, password=None, is_ssl=False):
+        self.setNetwork(Network("data", alias, address, nickname, channels, linerate, password, is_ssl))
                 
     def setNetwork(self, net):
         nets = self.data['networks']
@@ -465,14 +470,25 @@ if __name__ == '__main__':
     for network, settings in config['networks'].items():
         # use network specific nick if one has been configured
         nick = settings.get('nick', None) or config['nick']
+        linerate = settings.get('linerate', None) or config.get('linerate', None)
+        password = settings.get('password', None)
+        is_ssl = bool(settings.get('is_ssl', False))
+        port = settings.get('port', 6667)
+
 
         # prevent internal confusion with channels
         chanlist = []
         for channel in settings['channels']:
             if channel[0] not in '&#!+': channel = '#' + channel
             chanlist.append(channel)
+         
+        server_name = socket.getfqdn(settings['server'])
 
-        factory.createNetwork((settings['server'], 6667), network, nick, chanlist)
-        reactor.connectTCP(settings['server'], 6667, factory)
+        factory.createNetwork((settings['server'], port), network, nick, chanlist, linerate, password, is_ssl)
+        if is_ssl:
+            log.info("connection via SSL to %s:%d" % (server_name, port))
+            reactor.connectSSL(server_name, port, factory, ssl.ClientContextFactory())
+        else:
+            reactor.connectTCP(settings['server'], port, factory)
     
     reactor.run()

@@ -247,6 +247,7 @@ class PyFiBot(irc.IRCClient, CoreCommands):
 
     nickname = "pyfibot"
     realname = "http://code.google.com/p/pyfibot/"
+    password = None
     channels_names = {}
     channel_log = ChannelLog(line_limit = 500)
     
